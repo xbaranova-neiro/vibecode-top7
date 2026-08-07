@@ -221,8 +221,117 @@
 }
 
   </style>
-  <link rel="stylesheet" href="assets/longreads.css?v=zen1">
+  <link rel="stylesheet" href="assets/longreads.css?v=zen2">
   <link rel="preload" as="image" href="assets/hero-1.jpg" fetchpriority="high">
+  <script>
+    (function () {
+      var STORE_PREFIX = 'vb_attr_';
+      var ATTR_KEYS = [
+        'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term',
+        'yclid', 'gclid', 'fbclid', 'msclkid', 'ysclid'
+      ];
+
+      function storeGet(k) {
+        try { return sessionStorage.getItem(STORE_PREFIX + k); } catch (e) { return null; }
+      }
+      function storeSet(k, v) {
+        try { sessionStorage.setItem(STORE_PREFIX + k, v); } catch (e) {}
+      }
+      function isAttrKey(k) {
+        if (!k) return false;
+        var key = String(k).toLowerCase();
+        if (key.indexOf('utm_') === 0) return true;
+        return ATTR_KEYS.indexOf(key) !== -1;
+      }
+
+      function collectFromSearch(search) {
+        var q = new URLSearchParams(search || '');
+        var out = {};
+        q.forEach(function (v, k) {
+          if (!v) return;
+          if (!isAttrKey(k)) return;
+          out[k.toLowerCase()] = v;
+        });
+        return out;
+      }
+
+      // 1) URL → session (актуальный клик Директа / UTM)
+      var fromUrl = collectFromSearch(location.search);
+      Object.keys(fromUrl).forEach(function (k) { storeSet(k, fromUrl[k]); });
+
+      // 2) session → URL (если человек ушёл без query и вернулся на ленд)
+      var merged = new URLSearchParams(location.search);
+      var changed = false;
+      ATTR_KEYS.forEach(function (k) {
+        if (merged.has(k)) return;
+        var v = storeGet(k);
+        if (v) { merged.set(k, v); changed = true; }
+      });
+      // любые доп. utm_* из стораджа
+      try {
+        for (var i = 0; i < sessionStorage.length; i++) {
+          var sk = sessionStorage.key(i);
+          if (!sk || sk.indexOf(STORE_PREFIX + 'utm_') !== 0) continue;
+          var uk = sk.slice(STORE_PREFIX.length);
+          if (!merged.has(uk)) {
+            var uv = sessionStorage.getItem(sk);
+            if (uv) { merged.set(uk, uv); changed = true; }
+          }
+        }
+      } catch (e) {}
+
+      if (changed) {
+        try {
+          var next = location.pathname + (merged.toString() ? '?' + merged.toString() : '') + location.hash;
+          history.replaceState(null, '', next);
+        } catch (e) {}
+      }
+
+      window.__adsParams = function () {
+        var p = new URLSearchParams();
+        var live = new URLSearchParams(location.search);
+        ATTR_KEYS.forEach(function (k) {
+          var v = live.get(k) || storeGet(k);
+          if (v) p.set(k, v);
+        });
+        try {
+          for (var i = 0; i < sessionStorage.length; i++) {
+            var sk = sessionStorage.key(i);
+            if (!sk || sk.indexOf(STORE_PREFIX + 'utm_') !== 0) continue;
+            var uk = sk.slice(STORE_PREFIX.length);
+            if (!p.has(uk)) {
+              var uv = sessionStorage.getItem(sk);
+              if (uv) p.set(uk, uv);
+            }
+          }
+        } catch (e) {}
+        return p;
+      };
+      // совместимость со старым кодом
+      window.__utmParams = window.__adsParams;
+
+      window.__withUtm = function (url) {
+        if (!url || url.charAt(0) === '#') return url;
+        try {
+          var u = new URL(url, location.href);
+          window.__adsParams().forEach(function (v, k) {
+            if (!u.searchParams.has(k)) u.searchParams.set(k, v);
+          });
+          return u.toString();
+        } catch (e) { return url; }
+      };
+
+      window.__applyAdsParamsToUrl = function (href) {
+        try {
+          var u = new URL(href, location.href);
+          window.__adsParams().forEach(function (v, k) {
+            if (!u.searchParams.has(k)) u.searchParams.set(k, v);
+          });
+          return u.toString();
+        } catch (e) { return href; }
+      };
+    })();
+  </script>
   <!-- Yandex.Metrika counter -->
   <script type="text/javascript">
       (function(m,e,t,r,i,k,a){
@@ -236,44 +345,6 @@
   </script>
   <noscript><div><img src="https://mc.yandex.ru/watch/110878568" style="position:absolute; left:-9999px;" alt="" /></div></noscript>
   <!-- /Yandex.Metrika counter -->
-  <script>
-    (function () {
-      var KEYS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term'];
-      var q = new URLSearchParams(location.search);
-      var hit = false;
-      KEYS.forEach(function (k) {
-        var v = q.get(k);
-        if (v) { try { sessionStorage.setItem('utm_' + k, v); } catch (e) {} hit = true; }
-      });
-      if (!hit) {
-        KEYS.forEach(function (k) {
-          var v = q.get(k);
-          if (!v) { try { v = sessionStorage.getItem('utm_' + k); } catch (e) {} }
-          if (v) q.set(k, v);
-        });
-      }
-      window.__utmParams = function () {
-        var p = new URLSearchParams();
-        KEYS.forEach(function (k) {
-          var v;
-          try { v = sessionStorage.getItem('utm_' + k); } catch (e) {}
-          if (!v) v = new URLSearchParams(location.search).get(k);
-          if (v) p.set(k, v);
-        });
-        return p;
-      };
-      window.__withUtm = function (url) {
-        if (!url || url.charAt(0) === '#') return url;
-        try {
-          var u = new URL(url, location.href);
-          window.__utmParams().forEach(function (v, k) {
-            if (!u.searchParams.has(k)) u.searchParams.set(k, v);
-          });
-          return u.toString();
-        } catch (e) { return url; }
-      };
-    })();
-  </script>
 </head>
 <body>
 <main class="zen-site">
@@ -334,16 +405,26 @@ var REG_WIDGETS = {
 };
 
 function syncUtmToUrl() {
-  if (!window.__utmParams) return;
-  var params = window.__utmParams();
+  /* атрибуция уже применена в <head>; здесь — страховка перед открытием формы */
+  if (!window.__adsParams && !window.__utmParams) return;
+  var params = (window.__adsParams || window.__utmParams)();
   if (!params.toString()) return;
   try {
     var url = new URL(location.href);
     params.forEach(function (v, k) {
       if (!url.searchParams.has(k)) url.searchParams.set(k, v);
     });
-    history.replaceState(null, '', url.toString());
+    history.replaceState(null, '', url.pathname + (url.searchParams.toString() ? '?' + url.searchParams.toString() : '') + url.hash);
   } catch (e) {}
+}
+
+function applyAdsParamsToWidgetIframes(root) {
+  if (!root || !window.__applyAdsParamsToUrl) return;
+  root.querySelectorAll('iframe').forEach(function (iframe) {
+    if (!iframe.src) return;
+    var next = window.__applyAdsParamsToUrl(iframe.src);
+    if (next && next !== iframe.src) iframe.src = next;
+  });
 }
 
 var regScrollY = 0;
@@ -411,18 +492,21 @@ function resetRegPopupViewport() {
 }
 
 function openRegForm(slot) {
+  syncUtmToUrl();
   var morning = document.getElementById('reg-slot-morning');
   var evening = document.getElementById('reg-slot-evening');
   if (!morning || !evening) return;
   var isEvening = slot === 'evening';
   morning.style.display = isEvening ? 'none' : 'block';
   evening.style.display = isEvening ? 'block' : 'none';
+  applyAdsParamsToWidgetIframes(isEvening ? evening : morning);
   openRegPopup();
 }
 
 function openRegPopup() {
   var popup = document.getElementById('reg-popup');
   if (!popup || popup.classList.contains('is-open')) return;
+  syncUtmToUrl();
   lockPageScroll();
   popup.classList.add('is-open');
   popup.setAttribute('aria-hidden', 'false');

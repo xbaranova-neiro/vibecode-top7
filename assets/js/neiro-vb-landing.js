@@ -25,6 +25,30 @@
     return h === '12' ? '12' : '11';
   }
 
+  function collectAdsParams() {
+    if (typeof window.__adsParams === 'function') {
+      try {
+        return window.__adsParams();
+      } catch (e) {}
+    }
+    var p = new URLSearchParams();
+    var loc = new URLSearchParams(window.location.search);
+    loc.forEach(function (val, key) {
+      var k = key.toLowerCase();
+      if (
+        k.indexOf('utm_') === 0 ||
+        k === 'gclid' ||
+        k === 'fbclid' ||
+        k === 'yclid' ||
+        k === 'ysclid' ||
+        k === 'msclkid'
+      ) {
+        p.set(k, val);
+      }
+    });
+    return p;
+  }
+
   function buildRegFormUrl(base, slot) {
     var url;
     try {
@@ -32,12 +56,8 @@
     } catch (e) {
       return base;
     }
-    var loc = new URLSearchParams(window.location.search);
-    loc.forEach(function (val, key) {
-      var k = key.toLowerCase();
-      if (k.indexOf('utm_') === 0 || k === 'gclid' || k === 'fbclid' || k === 'yclid' || k === 'msclkid') {
-        url.searchParams.set(key, val);
-      }
+    collectAdsParams().forEach(function (val, key) {
+      if (!url.searchParams.has(key)) url.searchParams.set(key, val);
     });
     url.searchParams.set('time_web_VB', slot === 'evening' ? '19' : getMorningHour());
     return url.toString();
